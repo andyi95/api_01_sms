@@ -1,8 +1,8 @@
+import logging
 import os
 import time
-import requests
-import logging
 
+import requests
 from dotenv import load_dotenv
 from twilio.rest import Client
 
@@ -18,6 +18,14 @@ twillo_from_number = os.getenv('NUMBER_FROM')
 twillo_to_number = os.getenv('NUMBER_TO')
 twill_client = Client(account_sid, auth_token)
 
+# Включаем поддержку записи UTF-8 в журналах
+logging.basicConfig(
+    handlers=[logging.FileHandler('api_01_sms.log', 'w', 'utf-8')],
+    format="%(filename)s[LINE:%(lineno)d]# "
+           "%(levelname)-8s [%(asctime)s]  %(message)s",
+    level=logging.INFO
+)
+
 
 def get_status(user_id):
     params = {
@@ -31,8 +39,12 @@ def get_status(user_id):
             'https://api.vk.com/method/users.get',
             params=params
         )
-    except ConnectionError as e:
-        logging.error('Не удалось подключиться к серверу', e)
+    except requests.exceptions.RequestException as e:
+        logging.error(f'Не удалось подключиться к серверу: {e}')
+        return 0
+    except Exception as e:
+        logging.error(f'Ошибка подключения к VK API: {e}')
+        return 0
     try:
         response = response.json()['response'][0]
     except KeyError:
@@ -43,14 +55,19 @@ def get_status(user_id):
         return response
     else:
         logging.error('В ответе сервера не найден искомый параметр')
+        return 0
 
 
 def sms_sender(sms_text):
-    message = twill_client.messages.create(
-        body=sms_text,
-        from_=twillo_from_number,
-        to=twillo_to_number
-    )
+    try:
+        message = twill_client.messages.create(
+            body=sms_text,
+            from_=twillo_from_number,
+            to=twillo_to_number
+        )
+    except Exception as e:
+        logging.error(f'Ошибка подключения к сервису Twillo: {e}')
+        return e
     return message.sid
 
 
